@@ -1,0 +1,7 @@
+paho-mqtt
+websockets
+pandas
+numpy
+ast
+joblib
+scikit-learn

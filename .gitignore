@@ -7,3 +7,5 @@ esp32c5/csi_send/build/
 
 esp32c5/csi_recv/.vscode
 esp32c5/csi_send/.vscode
+backend/venv
+**/__pycache__/
