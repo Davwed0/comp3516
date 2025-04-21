@@ -57,6 +57,7 @@ static bool CSI_Q_ENABLE = 1;
 static void csi_process(const int8_t *csi_data, int length);
 // [1] END OF YOUR CODE
 static esp_mqtt_client_handle_t mqtt_client = NULL;
+
 // [2] YOUR CODE HERE
 // Modify the following functions to implement your algorithms.
 // NOTE: Please do not change the function names and return types.
@@ -71,37 +72,29 @@ int breathing_rate_estimation() {
 }
 
 void mqtt_send() {
-  if (mqtt_client == NULL) {
-    return;
-  }
-
   char mqtt_buffer[CSI_BUFFER_LENGTH]; // Increased size for the new format
 
-  uint8_t mac[6];
-  esp_wifi_get_mac(WIFI_IF_STA, mac);
+  char *p = mqtt_buffer;
+  *p++ = '[';
 
-  int mqtt_buffer_index =
-      snprintf(mqtt_buffer, sizeof(mqtt_buffer),
-               "{'mac': \"%02x:%02x:%02x:%02x:%02x:%02x\", 'CSIs': [", mac[0],
-               mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-  for (int i = 0; i < CSI_Q_INDEX - 1; i++) {
-    mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
-                                  sizeof(mqtt_buffer) - mqtt_buffer_index,
-                                  "%d%s", CSI_Q[i], ", ");
+  for (int i = 0; i < CSI_Q_INDEX; i++) {
+    p += snprintf(p, sizeof(mqtt_buffer) - (p - mqtt_buffer),
+                  i < CSI_Q_INDEX - 1 ? "%d, " : "%d", CSI_Q[i]);
   }
-  mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
-                                sizeof(mqtt_buffer) - mqtt_buffer_index, "%d",
-                                CSI_Q[CSI_Q_INDEX - 1]);
 
-  mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
-                                sizeof(mqtt_buffer) - mqtt_buffer_index, "]}");
-  ESP_LOGI("TEST", "MQTT Buffer: %s", mqtt_buffer);
+  *p++ = ']';
+  *p = '\0';
 
-  esp_mqtt_client_publish(mqtt_client, "csi/data", mqtt_buffer, 0, 1, 0);
+  ESP_LOGI("MQTT", "Buffer length: %d", (int)(p - mqtt_buffer));
+  int msg_id = esp_mqtt_client_enqueue(mqtt_client, "csi/data", mqtt_buffer,
+                                       strlen(mqtt_buffer), 1, 0, false);
+  if (msg_id != -1) {
+    ESP_LOGI("MQTT", "Message enqueued successfully, msg_id=%d", msg_id);
+  } else {
+    ESP_LOGW("MQTT", "Failed to enqueue message");
+  }
 }
 // [2] END OF YOUR CODE
-
 #define CONFIG_LESS_INTERFERENCE_CHANNEL 64
 #define CONFIG_WIFI_BAND_MODE WIFI_BAND_MODE_5G_ONLY
 #define CONFIG_WIFI_2G_BANDWIDTHS WIFI_BW20
@@ -113,7 +106,7 @@ void mqtt_send() {
 #define CONFIG_FORCE_GAIN 1
 #define CONFIG_GAIN_CONTROL CONFIG_FORCE_GAIN
 
-#define MQTT_BROKER_URL "mqtt://broker.emqx.io"
+#define MQTT_BROKER_URL "mqtt://192.168.31.215"
 
 // UPDATE: Define parameters for scan method
 #if CONFIG_EXAMPLE_WIFI_ALL_CHANNEL_SCAN
@@ -175,8 +168,17 @@ static void mqtt_init() {
       .broker.address.uri = MQTT_BROKER_URL,
       .broker.address.port = 1883,
       .broker.verification.skip_cert_common_name_check = true,
-
-  };
+      .buffer =
+          {
+              .size = 4096,
+              .out_size = 4096,
+          },
+      .network =
+          {
+              .disable_auto_reconnect = false,
+              .reconnect_timeout_ms = 5000,
+          },
+      .task = {.stack_size = 6144}};
   mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
   /* The last argument may be used to pass data to the event handler, in this
    * example mqtt_event_handler */
@@ -257,21 +259,34 @@ static void wifi_init() {
   //         },
   // };
 
+  // wifi_config_t wifi_config = {
+  //     .sta =
+  //         {
+  //             .ssid = "Hotspot1",
+  //             .password = "wifi1234",
+  //             // If you want to connect to other Wi-Fi networks including
+  //             your
+  //             // mobile phones, use this authomode
+  //             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+  //             // Otherwise, if you want to connect to your mobile
+  //             // phone's hotpot
+  //             // .threshold.authmode = WIFI_AUTH_OPEN,
+  //             // If you want to use your mobile phone's hotpot, use this scan
+  //             // method
+  //             .scan_method = DEFAULT_SCAN_METHOD,
+  //             //
+
+  //             .pmf_cfg = {.capable = true, .required = false},
+  //         },
+  // };
+
   wifi_config_t wifi_config = {
       .sta =
           {
-              .ssid = "Hotspot1",
-              .password = "wifi1234",
-              // If you want to connect to other Wi-Fi networks including your
-              // mobile phones, use this authomode
+              .ssid = "wifi_xiaomi",
+              .password = "123wifi123",
               .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-              // Otherwise, if you want to connect to your mobile
-              // phone's hotpot
-              // .threshold.authmode = WIFI_AUTH_OPEN,
-              // If you want to use your mobile phone's hotpot, use this scan
-              // method
               .scan_method = DEFAULT_SCAN_METHOD,
-              //
 
               .pmf_cfg = {.capable = true, .required = false},
           },
@@ -338,8 +353,6 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
     ets_printf("CSI_DATA,%d," MACSTR ",%d,%d,%d,%d\n", info->len,
                MAC2STR(info->mac), info->rx_ctrl.rssi, info->rx_ctrl.rate,
                info->rx_ctrl.noise_floor, info->rx_ctrl.channel);
-  } else {
-    csi_process(info->buf, info->len);
   }
 
   if (!info || !info->buf) {

@@ -28,7 +28,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CONFIG_LESS_INTERFERENCE_CHANNEL 149
+#define CONFIG_LESS_INTERFERENCE_CHANNEL 161
 #define CONFIG_WIFI_BAND_MODE WIFI_BAND_MODE_5G_ONLY
 #define CONFIG_WIFI_2G_BANDWIDTHS WIFI_BW20
 #define CONFIG_WIFI_5G_BANDWIDTHS WIFI_BW20
@@ -36,7 +36,7 @@
 #define CONFIG_WIFI_5G_PROTOCOL WIFI_PROTOCOL_11N
 #define CONFIG_ESP_NOW_PHYMODE WIFI_PHY_MODE_HT20
 #define CONFIG_ESP_NOW_RATE WIFI_PHY_RATE_MCS0_LGI
-#define CONFIG_SEND_FREQUENCY 100
+#define CONFIG_SEND_FREQUENCY 40
 
 static const uint8_t CONFIG_CSI_SEND_MAC[] = {0x1a, 0x00, 0x00,
                                               0x00, 0x00, 0x00};
@@ -123,8 +123,10 @@ void app_main() {
 
   // YOUR CODE HERE
   ESP_LOGI(TAG, "================ GROUP INFO ================");
-  const char *TEAM_MEMBER[] = {"a", "b", "c", "d"};
-  const char *TEAM_UID[] = {"1", "2", "3", "4"};
+  const char *TEAM_MEMBER[] = {"Bryan Melvison", "Filbert David Tejalaksana",
+                               "Georgy Valencio Siswanta", "Karanveer Singh"};
+  const char *TEAM_UID[] = {"3035869209", "3035945699", "3035898896",
+                            "3035918622"};
   ESP_LOGI(TAG, "TEAM_MEMBER: %s, %s, %s, %s | TEAM_UID: %s, %s, %s, %s",
            TEAM_MEMBER[0], TEAM_MEMBER[1], TEAM_MEMBER[2], TEAM_MEMBER[3],
            TEAM_UID[0], TEAM_UID[1], TEAM_UID[2], TEAM_UID[3]);
@@ -137,6 +139,6 @@ void app_main() {
       ESP_LOGW(TAG, "free_heap: %ld <%s> ESP-NOW send error",
                esp_get_free_heap_size(), esp_err_to_name(ret));
     }
-    usleep(1000 * 1000);
+    usleep(1000 * 1000 / CONFIG_SEND_FREQUENCY);
   }
 }
