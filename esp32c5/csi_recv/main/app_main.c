@@ -75,7 +75,7 @@ void mqtt_send() {
     return;
   }
 
-  char mqtt_buffer[CSI_BUFFER_LENGTH * 3]; // Increased size for the new format
+  char mqtt_buffer[CSI_BUFFER_LENGTH]; // Increased size for the new format
 
   uint8_t mac[6];
   esp_wifi_get_mac(WIFI_IF_STA, mac);
@@ -96,7 +96,7 @@ void mqtt_send() {
 
   mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
                                 sizeof(mqtt_buffer) - mqtt_buffer_index, "]}");
-  // ESP_LOGI("TEST", "MQTT Buffer: %s", mqtt_buffer);
+  ESP_LOGI("TEST", "MQTT Buffer: %s", mqtt_buffer);
 
   esp_mqtt_client_publish(mqtt_client, "csi/data", mqtt_buffer, 0, 1, 0);
 }
@@ -418,15 +418,16 @@ static void csi_process(const int8_t *csi_data, int length) {
   // [4] YOUR CODE HERE
 
   // 1. Fill the information of your group members
-  ESP_LOGI(TAG, "================ GROUP INFO ================");
-  const char *TEAM_MEMBER[] = {"Bryan Melvison", "Filbert David Tejalaksana",
-                               "Georgy Valencio Siswanta", "Karanveer Singh"};
-  const char *TEAM_UID[] = {"3035869209", "3035945699", "3035898896",
-                            "3035918622"};
-  ESP_LOGI(TAG, "TEAM_MEMBER: %s, %s, %s, %s | TEAM_UID: %s, %s, %s, %s",
-           TEAM_MEMBER[0], TEAM_MEMBER[1], TEAM_MEMBER[2], TEAM_MEMBER[3],
-           TEAM_UID[0], TEAM_UID[1], TEAM_UID[2], TEAM_UID[3]);
-  ESP_LOGI(TAG, "================ END OF GROUP INFO ================");
+  // ESP_LOGI(TAG, "================ GROUP INFO ================");
+  // const char *TEAM_MEMBER[] = {"Bryan Melvison", "Filbert David Tejalaksana",
+  //                              "Georgy Valencio Siswanta", "Karanveer
+  //                              Singh"};
+  // const char *TEAM_UID[] = {"3035869209", "3035945699", "3035898896",
+  //                           "3035918622"};
+  // ESP_LOGI(TAG, "TEAM_MEMBER: %s, %s, %s, %s | TEAM_UID: %s, %s, %s, %s",
+  //          TEAM_MEMBER[0], TEAM_MEMBER[1], TEAM_MEMBER[2], TEAM_MEMBER[3],
+  //          TEAM_UID[0], TEAM_UID[1], TEAM_UID[2], TEAM_UID[3]);
+  // ESP_LOGI(TAG, "================ END OF GROUP INFO ================");
 
   // 2. Call your algorithm functions here, e.g.: motion_detection(),
   // breathing_rate_estimation(), and mqtt_send() If you implement the
@@ -507,6 +508,8 @@ void app_main() {
    */
 
   if (wifi_connected) {
+    mqtt_init(); // Initialize MQTT Client
+    // send CSI data to mqtt
     esp_now_peer_info_t peer = {
         .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
         .ifidx = WIFI_IF_STA,
@@ -515,9 +518,6 @@ void app_main() {
     };
 
     wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
-
-    mqtt_init(); // Initialize MQTT Client
-    // send CSI data to mqtt
 
     wifi_csi_init(); // Initialize CSI Collection
 

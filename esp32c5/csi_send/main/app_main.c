@@ -137,6 +137,6 @@ void app_main() {
       ESP_LOGW(TAG, "free_heap: %ld <%s> ESP-NOW send error",
                esp_get_free_heap_size(), esp_err_to_name(ret));
     }
-    usleep(1000 * 1000 / CONFIG_SEND_FREQUENCY);
+    usleep(1000 * 1000);
   }
 }

@@ -4,7 +4,7 @@ import websockets
 import paho.mqtt.client as mqtt
 from datetime import datetime
 
-DEFAULT_MQTT_BROKER = "broker.hivemq.com"
+DEFAULT_MQTT_BROKER = "broker.emqx.io"
 DEFAULT_MQTT_PORT = 1883
 DEFAULT_MQTT_TOPIC = "#"
 WS_HOST = "localhost"
