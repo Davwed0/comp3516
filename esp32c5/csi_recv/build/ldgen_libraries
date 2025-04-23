@@ -83,4 +83,5 @@ C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/nvs_sec_prov
 C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/rt/librt.a
 C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/spiffs/libspiffs.a
 C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
+C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/espressif__esp-dsp/libespressif__esp-dsp.a
 C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/main/libmain.a

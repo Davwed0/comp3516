@@ -16,7 +16,7 @@ const COLUMN_WIDTHS = {
   timestamp: 100, 
   topic: 100,     
   macAddr: 100,  
-  csi: 400,       
+  rawPayload: 400,       
 }
 
 interface CSIDataTableProps {
@@ -50,27 +50,17 @@ export function CSIDataTable({ data }: CSIDataTableProps) {
       },
     },
     {
-      accessorKey: "mac_addr",
-      header: "MAC Address",  
-      size: COLUMN_WIDTHS.macAddr,
-      minSize: COLUMN_WIDTHS.macAddr,
-      maxSize: COLUMN_WIDTHS.macAddr,
-      cell: ({ row }) => {
-        const macAddr = row.getValue("mac_addr") as string
-        return macAddr || "N/A"
-      },
-    },
-    {
-      accessorKey: "CSIs",
+      accessorKey: "raw_payload",
       header: "CSI",
-      size: COLUMN_WIDTHS.csi,
-      minSize: COLUMN_WIDTHS.csi,
-      maxSize: COLUMN_WIDTHS.csi,
+      size: COLUMN_WIDTHS.rawPayload,
+      minSize: COLUMN_WIDTHS.rawPayload,
+      maxSize: COLUMN_WIDTHS.rawPayload,
       cell: ({ row }) => {
-        const csi = row.getValue("CSIs") as string[]
-        if (!csi || !Array.isArray(csi)) return "N/A"
+        var rawPayload = row.getValue("raw_payload") as string
+        rawPayload = rawPayload.split(", ")
+        if (!rawPayload || !Array.isArray(rawPayload)) return "N/A"
         
-        const csiFormatted = csi
+        const rawPayloadFormatted = rawPayload
           .map(val => {
             const parsed = parseFloat(val)
             return isNaN(parsed) ? "N/A" : parsed.toFixed(2)
@@ -78,8 +68,8 @@ export function CSIDataTable({ data }: CSIDataTableProps) {
           .join(", ")
           
         return (
-          <div className="max-w-full truncate" title={csiFormatted}>
-            {csiFormatted || "N/A"}
+          <div className="max-w-full truncate" title={rawPayloadFormatted}>
+            {rawPayloadFormatted || "N/A"}
           </div>
         )
       },

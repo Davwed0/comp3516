@@ -16,7 +16,7 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false)
   const [csiData, setCsiData] = useState<CSIData[]>([])
   const [ws, setWs] = useState<WebSocket | null>(null)
-  const [brokerAddress, setBrokerAddress] = useState("broker.eqmx.io")
+  const [brokerAddress, setBrokerAddress] = useState("192.168.31.215")
   const [topicFilter, setTopicFilter] = useState("#")
   const [searchTerm, setSearchTerm] = useState("")
   const { toast } = useToast()

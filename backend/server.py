@@ -3,10 +3,14 @@ import asyncio
 import websockets
 import paho.mqtt.client as mqtt
 from datetime import datetime
+import breathing as breathing
+import pandas as pd
+import numpy as np
+from ast import literal_eval
 
-DEFAULT_MQTT_BROKER = "broker.emqx.io"
+DEFAULT_MQTT_BROKER = "192.168.31.215"
 DEFAULT_MQTT_PORT = 1883
-DEFAULT_MQTT_TOPIC = "#"
+DEFAULT_MQTT_TOPIC = "csi/data"
 WS_HOST = "localhost"
 WS_PORT = 8765
 
@@ -33,27 +37,42 @@ def on_disconnect(client, userdata, rc):
 
 
 def on_message(client, userdata, msg):
-    try:
-        topic = msg.topic
+    # try:
+    topic = msg.topic
+    csi = literal_eval(msg.payload.decode())
+    csi = np.array(csi)
+    csi = csi.reshape(-1, 114)
 
-        try:
-            payload = json.loads(msg.payload.decode())
-        except:
-            payload = {"raw_payload": msg.payload.decode()}
+    if not hasattr(on_message, "csi_buffer"):
+        on_message.csi_buffer = np.empty((0, 114))
 
-        data_entry = {
-            "topic": topic,
-            "timestamp": datetime.now().isoformat(),
-            **payload,
-        }
+    on_message.csi_buffer = np.concatenate((on_message.csi_buffer, csi))
 
-        csi_data.append(data_entry)
-        if len(csi_data) > 100:
-            csi_data.pop(0)
+    if len(on_message.csi_buffer) >= 15 * 100:
+        breathing_rate = breathing.get_br(np.vstack(on_message.csi_buffer))
+        on_message.csi_buffer = on_message.csi_buffer[1:]
+    else:
+        breathing_rate = None
 
-        asyncio.run(broadcast_data(data_entry))
-    except Exception as e:
-        print(f"Error processing message: {e}")
+    print(f"Breathing Rate: {breathing_rate} BPM")
+
+    payload = {"raw_payload": csi.tolist()}
+
+    data_entry = {
+        "topic": topic,
+        "timestamp": datetime.now().isoformat(),
+        **payload,
+    }
+
+    csi_data.append(data_entry)
+    if len(csi_data) > 100:
+        csi_data.pop(0)
+
+    asyncio.run(broadcast_data(data_entry))
+
+
+# except Exception as e:
+#     print(f"Error processing message: {e}")
 
 
 async def broadcast_data(data):

@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "csi_send",
-    "project_version":    "1",
+    "project_version":    "f118316-dirty",
     "project_path":       "C:/Users/filbe/Desktop/group_project/esp32c5/csi_send",
     "idf_path":           "C:/Users/filbe/Desktop/COMP3516/esp-idf",
     "build_dir":          "C:/Users/filbe/Desktop/group_project/esp32c5/csi_send/build",

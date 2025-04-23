@@ -549,6 +549,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/espressif__esp-dsp/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("C:/Users/filbe/Desktop/group_project/esp32c5/csi_recv/build/esp-idf/main/cmake_install.cmake")
 endif()
 
