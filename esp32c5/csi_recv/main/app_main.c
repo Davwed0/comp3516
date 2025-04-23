@@ -50,7 +50,7 @@
 #include <string.h>
 
 // [1] YOUR CODE HERE
-#define CSI_BUFFER_LENGTH 11400
+#define CSI_BUFFER_LENGTH 1140
 #define CSI_FIFO_LENGTH 114
 static int16_t CSI_Q[CSI_BUFFER_LENGTH];
 static int CSI_Q_INDEX = 0; // CSI Buffer Index
@@ -105,7 +105,7 @@ void mqtt_send() {
   if (CSI_Q_INDEX == 0)
     return;
 
-  int buffer_size = CSI_Q_INDEX * 7 + 1; // 7 bytes per sample + 1 for '\0'
+  int buffer_size = CSI_Q_INDEX * 4 + 1; // 7 bytes per sample + 1 for '\0'
   char *mqtt_buffer = malloc(buffer_size);
   if (!mqtt_buffer) {
     ESP_LOGE("MQTT", "Failed to allocate buffer");
@@ -163,7 +163,7 @@ static void timer_callback(void *arg) {
 #define CONFIG_GAIN_CONTROL CONFIG_FORCE_GAIN
 
 #define MQTT_BROKER_URL "mqtt://192.168.31.215"
-#define MQTT_FREQ 1000 * 1000
+#define MQTT_FREQ 100 * 1000
 
 // UPDATE: Define parameters for scan method
 #if CONFIG_EXAMPLE_WIFI_ALL_CHANNEL_SCAN
@@ -225,15 +225,15 @@ static void mqtt_init() {
       .broker.address.uri = MQTT_BROKER_URL,
       .broker.address.port = 1883,
       .broker.verification.skip_cert_common_name_check = true,
-      .buffer =
-          {
-              .size = 4096,
-              .out_size = 4096,
-          },
       .network =
           {
               .disable_auto_reconnect = false,
               .reconnect_timeout_ms = 5000,
+          },
+          .buffer =
+          {
+              .size = 4096,
+              .out_size = 4096,
           },
   };
   mqtt_client = esp_mqtt_client_init(&mqtt_cfg);

@@ -8,6 +8,19 @@ import pandas as pd
 import numpy as np
 from ast import literal_eval
 
+# Add this near the top with other globals
+main_event_loop = None
+
+
+# Create a helper function to run coroutines from sync functions
+def schedule_task(coro):
+    if main_event_loop and main_event_loop.is_running():
+        return asyncio.run_coroutine_threadsafe(coro, main_event_loop)
+    else:
+        # Fallback in case the main loop isn't running
+        return asyncio.run(coro)
+
+
 DEFAULT_MQTT_BROKER = "192.168.31.215"
 DEFAULT_MQTT_PORT = 1883
 DEFAULT_MQTT_TOPIC = "csi/data"
@@ -26,14 +39,14 @@ def on_connect(client, userdata, flags, rc):
     print(f"Connected to MQTT broker with result code {rc}")
     mqtt_connected = True
     client.subscribe(topic_filter)
-    asyncio.run(broadcast_connection_status())
+    schedule_task(broadcast_connection_status())
 
 
 def on_disconnect(client, userdata, rc):
     global mqtt_connected
     print(f"Disconnected from MQTT broker with result code {rc}")
     mqtt_connected = False
-    asyncio.run(broadcast_connection_status())
+    schedule_task(broadcast_connection_status())
 
 
 def on_message(client, userdata, msg):
@@ -68,7 +81,7 @@ def on_message(client, userdata, msg):
     if len(csi_data) > 100:
         csi_data.pop(0)
 
-    asyncio.run(broadcast_data(data_entry))
+    schedule_task(broadcast_data(data_entry))
 
 
 # except Exception as e:
@@ -148,7 +161,8 @@ def setup_mqtt(broker=DEFAULT_MQTT_BROKER, port=DEFAULT_MQTT_PORT):
 
 
 async def main():
-    global mqtt_client
+    global mqtt_client, main_event_loop
+    main_event_loop = asyncio.get_running_loop()
 
     async with websockets.serve(websocket_handler, WS_HOST, WS_PORT):
         print(f"WebSocket server started on ws://{WS_HOST}:{WS_PORT}")
