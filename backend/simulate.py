@@ -9,23 +9,21 @@ MQTT_PORT = 1883
 TOPICS = [
     "csi/data"]
 
+def generate_csi_data():
+    """Generate simulated CSI data"""
+    num_CSIs = 10
+    CSIs = []
 
-def generate_csi_data(topic):
-    """Generate simulated data based on topic"""
-    timestamp = time.time()
+    for i in range(num_CSIs):
+        place = [random.uniform(-1, 1) for _ in range(114)]
+        CSIs.append(place)
 
-    if "csi" in topic:
-        num_CSIs = 100
-
-        CSIs = []
-        for i in range(num_CSIs):
-            place = []
-            for j in range(114):
-                place.append(random.uniform(-1, 1))
-            CSIs.append(place)
-        return {"device_id": topic.split("/")[-1], "CSIs": CSIs}
-
-    return {"value": random.random(), "timestamp": timestamp}
+    rssi = random.uniform(-100, 0)  # Simulated RSSI value
+    motion_detect = random.choice([0, 1])  # Simulated motion detected (0 or 1)
+    
+    # Combine CSIs, RSSI, and motion detection into a single list
+    data = CSIs + [motion_detect, rssi]
+    return data
 
 
 def main():
@@ -40,7 +38,7 @@ def main():
             time.sleep(2)
             topic = random.choice(TOPICS)
 
-            data = generate_csi_data(topic)
+            data = generate_csi_data()
             client.publish(topic, json.dumps(data))
             print(f"Published to {topic}: {data}")
 

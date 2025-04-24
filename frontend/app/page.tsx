@@ -56,34 +56,41 @@ export default function Home() {
         variant: "default",
       })
     }
-
+    
     newWs.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data)
-
+        const message = JSON.parse(event.data);
+    
         if (message.type === "data") {
           // Single data update
           setCsiData((prevData) => {
-            const newData = [...prevData, message.payload]
+            const newData = [...prevData, message.payload];
             // Keep only the last 100 records
-            return newData.length > 100 ? newData.slice(-100) : newData
-          })
-          console.log("Received data:", message.payload)
+            return newData.length > 100 ? newData.slice(-100) : newData;
+          });
+          console.log("Received data:", message.payload);
+          
         } else if (message.type === "initial_data" && Array.isArray(message.data)) {
           // Initial data load
-          setCsiData(message.data)
-          console.log("Received initial data:", message.data)
+          setCsiData(message.data);
+          console.log("Received initial data:", message.data);
+          
         } else if (message.type === "connection_status") {
-          setIsConnected(message.connected)
+          setIsConnected(message.connected);
           // Update topic filter if it's provided
           if (message.topic_filter) {
-            setTopicFilter(message.topic_filter)
+            setTopicFilter(message.topic_filter);
           }
+          console.log("Connection status updated:", message.connected);
+          
+        } else {
+          console.warn("Unknown message type:", message.type);
         }
+        
       } catch (error) {
-        console.error("Error parsing WebSocket message:", error)
+        console.error("Error parsing WebSocket message:", error);
       }
-    }
+    };
 
     newWs.onclose = () => {
       setWs(null)
@@ -156,7 +163,7 @@ export default function Home() {
 
   const handleTopicFilterChange = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && ws && ws.readyState === WebSocket.OPEN) {
-      const newFilter = e.currentTarget.value || "#"
+      const newFilter = e.currentTarget.value || "csi/data"
       ws.send(
         JSON.stringify({
           type: "set_topic_filter",
@@ -249,7 +256,7 @@ export default function Home() {
                   placeholder="Enter topic filter"
                   onKeyDown={handleTopicFilterChange}
                   disabled={!isConnected}
-                  defaultValue={"#"}
+                  defaultValue={"csi/data"}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-muted-foreground">
                   Press Enter

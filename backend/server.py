@@ -31,7 +31,7 @@ csi_data = []
 connected_clients = set()
 mqtt_client = None
 mqtt_connected = False
-topic_filter = "#"
+topic_filter = "csi/data"
 
 
 def on_connect(client, userdata, flags, rc):
@@ -58,7 +58,6 @@ def on_message(client, userdata, msg):
         csi = np.array(csi)
         csi = csi.reshape(-1, 114)
 
-        print(rssi, motion_detect)
 
         if not hasattr(on_message, "csi_buffer"):
             on_message.csi_buffer = np.empty((0, 114))
@@ -71,7 +70,7 @@ def on_message(client, userdata, msg):
         else:
             breathing_rate = None
 
-        payload = {"raw_payload": csi.tolist()}
+        payload = {"raw_payload": csi.tolist(), "rssi": rssi, "motion_detect": motion_detect, "breathing_rate": breathing_rate}
 
         data_entry = {
             "topic": topic,
