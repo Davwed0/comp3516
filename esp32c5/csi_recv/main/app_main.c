@@ -34,21 +34,24 @@
  * Have fun building!
  */
 
+#include "esp_dsp.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_now.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "mqtt_client.h"
 #include "nvs_flash.h"
 #include "rom/ets_sys.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // [1] YOUR CODE HERE
-#define CSI_BUFFER_LENGTH 800
-#define CSI_FIFO_LENGTH 100
+#define CSI_BUFFER_LENGTH 1140
+#define CSI_FIFO_LENGTH 114
 static int16_t CSI_Q[CSI_BUFFER_LENGTH];
 static int CSI_Q_INDEX = 0; // CSI Buffer Index
 // Enable/Disable CSI Buffering. 1: Enable, using buffer, 0: Disable, using
@@ -57,12 +60,40 @@ static bool CSI_Q_ENABLE = 1;
 static void csi_process(const int8_t *csi_data, int length);
 // [1] END OF YOUR CODE
 static esp_mqtt_client_handle_t mqtt_client = NULL;
+
 // [2] YOUR CODE HERE
-// Modify the following functions to implement your algorithms.
-// NOTE: Please do not change the function names and return types.
+
+#define RSSI_BUFFER_SIZE 20
+#define MOTION_THRESHOLD 3.5
+#define MOTION_THRESHOLD 0.5
+static int8_t rssi_buffer[RSSI_BUFFER_SIZE];
+static int rssi_index = 0;
+static bool rssi_buffer_filled = false;
+static bool motion_detected = false;
+static int stable_counter = 0;
+
+static float variance = 0;
+
 bool motion_detection() {
-  // TODO: Implement motion detection logic using CSI data in CSI_Q
-  return false; // Placeholder
+  if (!rssi_buffer_filled && rssi_index < 5) {
+    return false;
+  }
+
+  float sum = 0.0;
+  int count = rssi_buffer_filled ? RSSI_BUFFER_SIZE : rssi_index;
+
+  for (int i = 0; i < count; i++) {
+    sum += rssi_buffer[i];
+  }
+  float mean = sum / count;
+
+  variance = 0.0;
+  for (int i = 0; i < count; i++) {
+    float diff = rssi_buffer[i] - mean;
+    variance += diff * diff;
+  }
+  variance /= count;
+  return true;
 }
 
 int breathing_rate_estimation() {
@@ -71,37 +102,55 @@ int breathing_rate_estimation() {
 }
 
 void mqtt_send() {
-  if (mqtt_client == NULL) {
+  if (CSI_Q_INDEX == 0)
+    return;
+
+  int buffer_size = CSI_Q_INDEX * 4 + 1; // 7 bytes per sample + 1 for '\0'
+  char *mqtt_buffer = malloc(buffer_size);
+  if (!mqtt_buffer) {
+    ESP_LOGE("MQTT", "Failed to allocate buffer");
     return;
   }
 
-  char mqtt_buffer[CSI_BUFFER_LENGTH * 3]; // Increased size for the new format
+  char *p = mqtt_buffer;
+  int remaining = buffer_size;
 
-  uint8_t mac[6];
-  esp_wifi_get_mac(WIFI_IF_STA, mac);
+  for (int i = 0; i < CSI_Q_INDEX; i++) {
+    int written =
+        snprintf(p, remaining, (i < CSI_Q_INDEX - 1) ? "%d," : "%d", CSI_Q[i]);
 
-  int mqtt_buffer_index =
-      snprintf(mqtt_buffer, sizeof(mqtt_buffer),
-               "{'mac': \"%02x:%02x:%02x:%02x:%02x:%02x\", 'CSIs': [", mac[0],
-               mac[1], mac[2], mac[3], mac[4], mac[5]);
+    if (written < 0 || written >= remaining) {
+      ESP_LOGE("MQTT", "Buffer overflow at sample %d", i);
+      break;
+    }
 
-  for (int i = 0; i < CSI_Q_INDEX - 1; i++) {
-    mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
-                                  sizeof(mqtt_buffer) - mqtt_buffer_index,
-                                  "%d%s", CSI_Q[i], ", ");
+    p += written;
+    remaining -= written;
   }
-  mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
-                                sizeof(mqtt_buffer) - mqtt_buffer_index, "%d",
-                                CSI_Q[CSI_Q_INDEX - 1]);
 
-  mqtt_buffer_index += snprintf(mqtt_buffer + mqtt_buffer_index,
-                                sizeof(mqtt_buffer) - mqtt_buffer_index, "]}");
-  // ESP_LOGI("TEST", "MQTT Buffer: %s", mqtt_buffer);
+  *p = '\0';
 
-  esp_mqtt_client_publish(mqtt_client, "csi/data", mqtt_buffer, 0, 1, 0);
+  int payload_len = strlen(mqtt_buffer);
+  int msg_id = esp_mqtt_client_publish(mqtt_client, "csi/data", mqtt_buffer,
+                                       payload_len, 1, 0);
+  free(mqtt_buffer);
+  ESP_LOGI("Motion Detection", "Variance: %.2f, Motion Detected: %d", variance,
+           variance > MOTION_THRESHOLD);
+
+  if (msg_id != -1) {
+    // ESP_LOGI("MQTT", "Message sent, msg_id=%d", msg_id);
+  } else {
+    ESP_LOGW("MQTT", "Send failed");
+  }
 }
-// [2] END OF YOUR CODE
 
+static void timer_callback(void *arg) {
+  if (CSI_Q_INDEX > 0) {
+    mqtt_send();
+  }
+}
+
+// [2] END OF YOUR CODE
 #define CONFIG_LESS_INTERFERENCE_CHANNEL 64
 #define CONFIG_WIFI_BAND_MODE WIFI_BAND_MODE_5G_ONLY
 #define CONFIG_WIFI_2G_BANDWIDTHS WIFI_BW20
@@ -113,7 +162,8 @@ void mqtt_send() {
 #define CONFIG_FORCE_GAIN 1
 #define CONFIG_GAIN_CONTROL CONFIG_FORCE_GAIN
 
-#define MQTT_BROKER_URL "mqtt://broker.emqx.io"
+#define MQTT_BROKER_URL "mqtt://192.168.31.215"
+#define MQTT_FREQ 100 * 1000
 
 // UPDATE: Define parameters for scan method
 #if CONFIG_EXAMPLE_WIFI_ALL_CHANNEL_SCAN
@@ -175,7 +225,16 @@ static void mqtt_init() {
       .broker.address.uri = MQTT_BROKER_URL,
       .broker.address.port = 1883,
       .broker.verification.skip_cert_common_name_check = true,
-
+      .network =
+          {
+              .disable_auto_reconnect = false,
+              .reconnect_timeout_ms = 5000,
+          },
+          .buffer =
+          {
+              .size = 4096,
+              .out_size = 4096,
+          },
   };
   mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
   /* The last argument may be used to pass data to the event handler, in this
@@ -206,7 +265,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
     break;
   case MQTT_EVENT_PUBLISHED:
-    ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+    // ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
     break;
   case MQTT_EVENT_ERROR:
     ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -257,21 +316,34 @@ static void wifi_init() {
   //         },
   // };
 
+  // wifi_config_t wifi_config = {
+  //     .sta =
+  //         {
+  //             .ssid = "Hotspot1",
+  //             .password = "wifi1234",
+  //             // If you want to connect to other Wi-Fi networks including
+  //             // your
+  //             // mobile phones, use this authomode
+  //             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+  //             // Otherwise, if you want to connect to your mobile
+  //             // phone's hotpot
+  //             // .threshold.authmode = WIFI_AUTH_OPEN,
+  //             // If you want to use your mobile phone's hotpot, use this scan
+  //             // method
+  //             .scan_method = DEFAULT_SCAN_METHOD,
+  //             //
+
+  //             .pmf_cfg = {.capable = true, .required = false},
+  //         },
+  // };
+
   wifi_config_t wifi_config = {
       .sta =
           {
-              .ssid = "Hotspot1",
-              .password = "wifi1234",
-              // If you want to connect to other Wi-Fi networks including your
-              // mobile phones, use this authomode
+              .ssid = "wifi_xiaomi",
+              .password = "123wifi123",
               .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-              // Otherwise, if you want to connect to your mobile
-              // phone's hotpot
-              // .threshold.authmode = WIFI_AUTH_OPEN,
-              // If you want to use your mobile phone's hotpot, use this scan
-              // method
               .scan_method = DEFAULT_SCAN_METHOD,
-              //
 
               .pmf_cfg = {.capable = true, .required = false},
           },
@@ -330,7 +402,15 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
   if (!info || !info->buf)
     return;
 
-  ESP_LOGI(TAG, "CSI callback triggered");
+  rssi_buffer[rssi_index] = info->rx_ctrl.rssi;
+  rssi_index = (rssi_index + 1) % RSSI_BUFFER_SIZE;
+  if (rssi_index == 0) {
+    rssi_buffer_filled = true;
+  }
+
+  motion_detection();
+
+  // ESP_LOGI(TAG, "CSI callback triggered");
 
   // Applying the CSI_Q_ENABLE flag to determine the output method
   // 1: Enable, using buffer, 0: Disable, using serial output
@@ -338,8 +418,6 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
     ets_printf("CSI_DATA,%d," MACSTR ",%d,%d,%d,%d\n", info->len,
                MAC2STR(info->mac), info->rx_ctrl.rssi, info->rx_ctrl.rate,
                info->rx_ctrl.noise_floor, info->rx_ctrl.channel);
-  } else {
-    csi_process(info->buf, info->len);
   }
 
   if (!info || !info->buf) {
@@ -347,8 +425,8 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
     return;
   }
 
-  ESP_LOGI(TAG, "Received MAC: " MACSTR ", Expected MAC: " MACSTR,
-           MAC2STR(info->mac), MAC2STR(CONFIG_CSI_SEND_MAC));
+  // ESP_LOGI(TAG, "Received MAC: " MACSTR ", Expected MAC: " MACSTR,
+  //          MAC2STR(info->mac), MAC2STR(CONFIG_CSI_SEND_MAC));
 
   if (memcmp(info->mac, CONFIG_CSI_SEND_MAC, 6)) {
     ESP_LOGI(TAG, "MAC address doesn't match, skipping packet");
@@ -396,7 +474,7 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
   }
 
   else {
-    ESP_LOGI(TAG, "================ CSI RECV via Buffer ================");
+    // ESP_LOGI(TAG, "================ CSI RECV via Buffer ================");
     csi_process(info->buf, info->len);
   }
 }
@@ -409,7 +487,7 @@ static void csi_process(const int8_t *csi_data, int length) {
     memmove(CSI_Q, CSI_Q + CSI_FIFO_LENGTH, shift_size * sizeof(int16_t));
     CSI_Q_INDEX = shift_size;
   }
-  ESP_LOGI(TAG, "CSI Buffer Status: %d samples stored", CSI_Q_INDEX);
+  // ESP_LOGI(TAG, "CSI Buffer Status: %d samples stored", CSI_Q_INDEX);
   // Append new CSI data to the buffer
   for (int i = 0; i < length && CSI_Q_INDEX < CSI_BUFFER_LENGTH; i++) {
     CSI_Q[CSI_Q_INDEX++] = (int16_t)csi_data[i];
@@ -418,22 +496,22 @@ static void csi_process(const int8_t *csi_data, int length) {
   // [4] YOUR CODE HERE
 
   // 1. Fill the information of your group members
-  ESP_LOGI(TAG, "================ GROUP INFO ================");
-  const char *TEAM_MEMBER[] = {"Bryan Melvison", "Filbert David Tejalaksana",
-                               "Georgy Valencio Siswanta", "Karanveer Singh"};
-  const char *TEAM_UID[] = {"3035869209", "3035945699", "3035898896",
-                            "3035918622"};
-  ESP_LOGI(TAG, "TEAM_MEMBER: %s, %s, %s, %s | TEAM_UID: %s, %s, %s, %s",
-           TEAM_MEMBER[0], TEAM_MEMBER[1], TEAM_MEMBER[2], TEAM_MEMBER[3],
-           TEAM_UID[0], TEAM_UID[1], TEAM_UID[2], TEAM_UID[3]);
-  ESP_LOGI(TAG, "================ END OF GROUP INFO ================");
+  // ESP_LOGI(TAG, "================ GROUP INFO ================");
+  // const char *TEAM_MEMBER[] = {"Bryan Melvison", "Filbert David Tejalaksana",
+  //                              "Georgy Valencio Siswanta", "Karanveer
+  //                              Singh"};
+  // const char *TEAM_UID[] = {"3035869209", "3035945699", "3035898896",
+  //                           "3035918622"};
+  // ESP_LOGI(TAG, "TEAM_MEMBER: %s, %s, %s, %s | TEAM_UID: %s, %s, %s, %s",
+  //          TEAM_MEMBER[0], TEAM_MEMBER[1], TEAM_MEMBER[2], TEAM_MEMBER[3],
+  //          TEAM_UID[0], TEAM_UID[1], TEAM_UID[2], TEAM_UID[3]);
+  // ESP_LOGI(TAG, "================ END OF GROUP INFO ================");
 
   // 2. Call your algorithm functions here, e.g.: motion_detection(),
   // breathing_rate_estimation(), and mqtt_send() If you implement the
   // algorithm on-board, you can return the results to the host, else send the
   // CSI data. motion_detection(); breathing_rate_estimation(); mqtt_send();
   // [4] END YOUR CODE HERE
-  mqtt_send();
 }
 
 //------------------------------------------------------CSI Config
@@ -507,6 +585,14 @@ void app_main() {
    */
 
   if (wifi_connected) {
+    mqtt_init(); // Initialize MQTT Client
+    const esp_timer_create_args_t timer_args = {.callback = &timer_callback,
+                                                .name = "mqtt_timer"};
+    esp_timer_handle_t timer;
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, MQTT_FREQ));
+
+    // send CSI data to mqtt
     esp_now_peer_info_t peer = {
         .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
         .ifidx = WIFI_IF_STA,
@@ -515,9 +601,6 @@ void app_main() {
     };
 
     wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
-
-    mqtt_init(); // Initialize MQTT Client
-    // send CSI data to mqtt
 
     wifi_csi_init(); // Initialize CSI Collection
 

@@ -19,7 +19,7 @@ import type { CSIData } from "@/types/csi-data"
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
 const MAX_DATA_POINTS = 50
-const MOTION_THRESHOLD = 0.5 // Threshold for motion detection
+const MOTION_THRESHOLD = 0.5 
 
 interface MotionDetectionChartProps {
   data: CSIData[]

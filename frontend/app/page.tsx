@@ -8,8 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CSIDataTable } from "@/components/csi-data-table"
 import { ConnectionStatus } from "@/components/connection-status"
-import { CSIAmplitudeChart } from "@/components/csi-amplitude-chart"
-import { CSITimeSeriesChart } from "@/components/csi-time-series-chart"
 import { MotionDetectionChart } from "@/components/motion-detection-chart"
 import { BreathingRateChart } from "@/components/breathing-rate-chart"
 import { useToast } from "@/hooks/use-toast"
@@ -268,7 +266,7 @@ export default function Home() {
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle>Visualization Options</CardTitle>
-                <CardDescription>Select topic and subcarrier for detailed visualization</CardDescription>
+                <CardDescription>Select topic for detailed visualization</CardDescription>
               </div>
               <Button variant="outline" onClick={toggleTableVisibility}>
                 {showTable ? (
@@ -303,21 +301,6 @@ export default function Home() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-full md:w-1/2">
-                <label className="text-sm font-medium mb-2 block">Select Subcarrier Index</label>
-                <Select onValueChange={handleSubcarrierChange} defaultValue="0">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Subcarrier 0" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 10 }, (_, i) => (
-                      <SelectItem key={i} value={i.toString()}>
-                        Subcarrier {i}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -335,30 +318,17 @@ export default function Home() {
         </Card>
       )}
 
-      <Tabs defaultValue="amplitude" className="mb-6">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 mb-4">
-          <TabsTrigger value="amplitude">CSI Amplitude</TabsTrigger>
-          <TabsTrigger value="timeseries">Time Series</TabsTrigger>
-          <TabsTrigger value="motion">Motion Detection</TabsTrigger>
-          <TabsTrigger value="breathing">Breathing Rate</TabsTrigger>
-        </TabsList>
-        <TabsContent value="amplitude">
-          <CSIAmplitudeChart data={filteredData} topic={selectedTopic || undefined} />
-        </TabsContent>
-        <TabsContent value="timeseries">
-          <CSITimeSeriesChart
-            data={filteredData}
-            topic={selectedTopic || undefined}
-            subcarrierIndex={selectedSubcarrier}
-          />
-        </TabsContent>
-        <TabsContent value="motion">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Data Visualization</CardTitle>
+        </CardHeader>
+        <CardContent>
           <MotionDetectionChart data={filteredData} topic={selectedTopic || undefined} />
-        </TabsContent>
-        <TabsContent value="breathing">
+        </CardContent>
+        <CardContent>
           <BreathingRateChart data={filteredData} topic={selectedTopic || undefined} />
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
     </main>
   )
 }

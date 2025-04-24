@@ -7,7 +7,7 @@ MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 
 TOPICS = [
-    "csi/esp_recv1"]
+    "csi/data"]
 
 
 def generate_csi_data(topic):
@@ -19,8 +19,10 @@ def generate_csi_data(topic):
 
         CSIs = []
         for i in range(num_CSIs):
-            CSIs.append(random.uniform(0.1, 1.0))
-
+            place = []
+            for j in range(114):
+                place.append(random.uniform(-1, 1))
+            CSIs.append(place)
         return {"device_id": topic.split("/")[-1], "CSIs": CSIs}
 
     return {"value": random.random(), "timestamp": timestamp}
