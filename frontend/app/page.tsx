@@ -8,17 +8,26 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CSIDataTable } from "@/components/csi-data-table"
 import { ConnectionStatus } from "@/components/connection-status"
+import { CSIAmplitudeChart } from "@/components/csi-amplitude-chart"
+import { CSITimeSeriesChart } from "@/components/csi-time-series-chart"
+import { MotionDetectionChart } from "@/components/motion-detection-chart"
+import { BreathingRateChart } from "@/components/breathing-rate-chart"
 import { useToast } from "@/hooks/use-toast"
-import { Search } from "lucide-react"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import type { CSIData } from "@/types/csi-data"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function Home() {
   const [isConnected, setIsConnected] = useState(false)
   const [csiData, setCsiData] = useState<CSIData[]>([])
   const [ws, setWs] = useState<WebSocket | null>(null)
-  const [brokerAddress, setBrokerAddress] = useState("broker.hivemq.com")
+  const [brokerAddress, setBrokerAddress] = useState("broker.emqx.io")
   const [topicFilter, setTopicFilter] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+  const [selectedSubcarrier, setSelectedSubcarrier] = useState(0)
+  const [showTable, setShowTable] = useState(true)
   const { toast } = useToast()
 
   // Filter data based on search term
@@ -26,6 +35,17 @@ export default function Home() {
     if (!searchTerm) return csiData
     return csiData.filter((item) => item.topic && item.topic.toLowerCase().includes(searchTerm.toLowerCase()))
   }, [csiData, searchTerm])
+
+  // Get unique topics from data
+  const topics = useMemo(() => {
+    const topicSet = new Set<string>()
+    csiData.forEach((item) => {
+      if (item.topic) {
+        topicSet.add(item.topic)
+      }
+    })
+    return Array.from(topicSet)
+  }, [csiData])
 
   const connectWebSocket = useCallback(() => {
     const newWs = new WebSocket("ws://localhost:8765")
@@ -50,6 +70,11 @@ export default function Home() {
             // Keep only the last 100 records
             return newData.length > 100 ? newData.slice(-100) : newData
           })
+          console.log("Received data:", message.payload)
+        } else if (message.type === "initial_data" && Array.isArray(message.data)) {
+          // Initial data load
+          setCsiData(message.data)
+          console.log("Received initial data:", message.data)
         } else if (message.type === "connection_status") {
           setIsConnected(message.connected)
           // Update topic filter if it's provided
@@ -149,6 +174,37 @@ export default function Home() {
     }
   }
 
+  const handleTopicChange = (value: string) => {
+    setSelectedTopic(value === "all" ? null : value)
+  }
+
+  const handleSubcarrierChange = (value: string) => {
+    setSelectedSubcarrier(Number.parseInt(value, 10))
+  }
+
+  const toggleTableVisibility = () => {
+    // Save current scroll position
+    const scrollPosition = window.scrollY
+
+    // Toggle table visibility
+    setShowTable(!showTable)
+
+    // Use setTimeout to restore scroll position after state update and re-render
+    setTimeout(() => {
+      window.scrollTo({
+        top: scrollPosition,
+        behavior: "instant",
+      })
+    }, 0)
+  }
+
+  // Debug function to log data structure
+  useEffect(() => {
+    if (csiData.length > 0) {
+      console.log("Current data structure:", csiData[0])
+    }
+  }, [csiData])
+
   return (
     <main className="container mx-auto p-4">
       <h1 className="text-3xl font-bold mb-6">CSI Data Visualization</h1>
@@ -206,7 +262,69 @@ export default function Home() {
         </Card>
       </div>
 
+      <div className="mb-6">
         <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Visualization Options</CardTitle>
+                <CardDescription>Select topic and subcarrier for detailed visualization</CardDescription>
+              </div>
+              <Button variant="outline" onClick={toggleTableVisibility}>
+                {showTable ? (
+                  <>
+                    <ChevronUp className="mr-2 h-4 w-4" />
+                    Hide Table
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="mr-2 h-4 w-4" />
+                    Show Table
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="w-full md:w-1/2">
+                <label className="text-sm font-medium mb-2 block">Select Topic</label>
+                <Select onValueChange={handleTopicChange} defaultValue="all">
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Topics" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Topics</SelectItem>
+                    {topics.map((topic) => (
+                      <SelectItem key={topic} value={topic}>
+                        {topic}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-full md:w-1/2">
+                <label className="text-sm font-medium mb-2 block">Select Subcarrier Index</label>
+                <Select onValueChange={handleSubcarrierChange} defaultValue="0">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Subcarrier 0" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 10 }, (_, i) => (
+                      <SelectItem key={i} value={i.toString()}>
+                        Subcarrier {i}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showTable && (
+        <Card className="mb-6">
           <CardHeader>
             <CardTitle>Received Data</CardTitle>
             <CardDescription>Tabular view of Channel State Information</CardDescription>
@@ -215,6 +333,32 @@ export default function Home() {
             <CSIDataTable data={filteredData} />
           </CardContent>
         </Card>
+      )}
+
+      <Tabs defaultValue="amplitude" className="mb-6">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4 mb-4">
+          <TabsTrigger value="amplitude">CSI Amplitude</TabsTrigger>
+          <TabsTrigger value="timeseries">Time Series</TabsTrigger>
+          <TabsTrigger value="motion">Motion Detection</TabsTrigger>
+          <TabsTrigger value="breathing">Breathing Rate</TabsTrigger>
+        </TabsList>
+        <TabsContent value="amplitude">
+          <CSIAmplitudeChart data={filteredData} topic={selectedTopic || undefined} />
+        </TabsContent>
+        <TabsContent value="timeseries">
+          <CSITimeSeriesChart
+            data={filteredData}
+            topic={selectedTopic || undefined}
+            subcarrierIndex={selectedSubcarrier}
+          />
+        </TabsContent>
+        <TabsContent value="motion">
+          <MotionDetectionChart data={filteredData} topic={selectedTopic || undefined} />
+        </TabsContent>
+        <TabsContent value="breathing">
+          <BreathingRateChart data={filteredData} topic={selectedTopic || undefined} />
+        </TabsContent>
+      </Tabs>
     </main>
   )
 }

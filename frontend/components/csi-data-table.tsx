@@ -2,150 +2,80 @@
 
 import { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { CSIData } from "@/types/csi-data"
-
-const COLUMN_WIDTHS = {
-  timestamp: 100, 
-  topic: 100,     
-  macAddr: 100,  
-  csi: 400,       
-}
 
 interface CSIDataTableProps {
   data: CSIData[]
 }
 
 export function CSIDataTable({ data }: CSIDataTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [searchTerm, setSearchTerm] = useState("")
 
-  const columns: ColumnDef<CSIData>[] = [
-    {
-      accessorKey: "timestamp",
-      header: "Timestamp",
-      size: COLUMN_WIDTHS.timestamp,
-      minSize: COLUMN_WIDTHS.timestamp,
-      maxSize: COLUMN_WIDTHS.timestamp,
-      cell: ({ row }) => {
-        const timestamp = row.getValue("timestamp") as string
-        return timestamp ? new Date(timestamp).toLocaleTimeString() : "N/A"
-      },
-    },
-    {
-      accessorKey: "topic",
-      header: "Topic",
-      size: COLUMN_WIDTHS.topic,
-      minSize: COLUMN_WIDTHS.topic,
-      maxSize: COLUMN_WIDTHS.topic,
-      cell: ({ row }) => {
-        const topic = row.getValue("topic") as string
-        return topic || "N/A"
-      },
-    },
-    {
-      accessorKey: "mac_addr",
-      header: "MAC Address",  
-      size: COLUMN_WIDTHS.macAddr,
-      minSize: COLUMN_WIDTHS.macAddr,
-      maxSize: COLUMN_WIDTHS.macAddr,
-      cell: ({ row }) => {
-        const macAddr = row.getValue("mac_addr") as string
-        return macAddr || "N/A"
-      },
-    },
-    {
-      accessorKey: "CSIs",
-      header: "CSI",
-      size: COLUMN_WIDTHS.csi,
-      minSize: COLUMN_WIDTHS.csi,
-      maxSize: COLUMN_WIDTHS.csi,
-      cell: ({ row }) => {
-        const csi = row.getValue("CSIs") as string[]
-        if (!csi || !Array.isArray(csi)) return "N/A"
-        
-        const csiFormatted = csi
-          .map(val => {
-            const parsed = parseFloat(val)
-            return isNaN(parsed) ? "N/A" : parsed.toFixed(2)
-          })
-          .join(", ")
-          
+  // Filter data based on search term
+  const filteredData = searchTerm
+    ? data.filter((item) => {
+        const searchLower = searchTerm.toLowerCase()
         return (
-          <div className="max-w-full truncate" title={csiFormatted}>
-            {csiFormatted || "N/A"}
-          </div>
+          (item.topic && item.topic.toLowerCase().includes(searchLower)) ||
+          (item.device_id && item.device_id.toLowerCase().includes(searchLower))
         )
-      },
-    },
-  ]
+      })
+    : data
 
-  const table = useReactTable({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    onSortingChange: setSorting,
-    state: { sorting },
-    columnResizeMode: "onChange",
-  })
+  // Get the latest 20 items
+  const displayData = filteredData.slice(-20).reverse()
 
   return (
-    <div>
-      <div className="rounded-md border h-[400px] overflow-y-auto">
-        <Table style={{ tableLayout: "fixed", width: "100%" }}>
-          <TableHeader className="sticky top-0 bg-secondary z-10">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead 
-                    key={header.id} 
-                    style={{ 
-                      width: header.column.getSize(),
-                      minWidth: header.column.getSize(),
-                      maxWidth: header.column.getSize()
-                    }}
-                  >
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
+    <div className="space-y-4">
+      <Input
+        placeholder="Search by topic or device ID"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="max-w-sm"
+      />
+
+      <ScrollArea className="h-[400px] rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Time</TableHead>
+              <TableHead>Topic</TableHead>
+              <TableHead>Device ID</TableHead>
+              <TableHead>Data</TableHead>
+            </TableRow>
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell 
-                      key={cell.id} 
-                      style={{ 
-                        width: cell.column.getSize(),
-                        minWidth: cell.column.getSize(),
-                        maxWidth: cell.column.getSize()
-                      }}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+            {displayData.length > 0 ? (
+              displayData.map((item, index) => (
+                <TableRow key={index}>
+                  <TableCell>{item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : "N/A"}</TableCell>
+                  <TableCell>{item.topic || "N/A"}</TableCell>
+                  <TableCell>{item.device_id || "N/A"}</TableCell>
+                  <TableCell>
+                    {item.CSIs ? (
+                      <span>{Array.isArray(item.CSIs) ? `${item.CSIs.length} values` : "Invalid format"}</span>
+                    ) : item.subcarriers ? (
+                      <span>
+                        {Array.isArray(item.subcarriers) ? `${item.subcarriers.length} subcarriers` : "Invalid format"}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">No CSI data</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell colSpan={4} className="text-center h-24">
                   No data available
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollArea>
     </div>
   )
 }

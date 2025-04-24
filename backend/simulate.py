@@ -7,9 +7,7 @@ MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 
 TOPICS = [
-    "csi/esp_recv1",
-    "csi/esp_recv2",
-]
+    "csi/esp_recv1"]
 
 
 def generate_csi_data(topic):
@@ -37,6 +35,7 @@ def main():
     try:
         while True:
             # Select a random topic
+            time.sleep(2)
             topic = random.choice(TOPICS)
 
             data = generate_csi_data(topic)
