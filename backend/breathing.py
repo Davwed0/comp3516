@@ -42,7 +42,7 @@ def get_br(csi_data, fs=100):
     # -----------------------------------------------------------
     # FILTER AND SMOOTHEN SIGNAL
     # -----------------------------------------------------------
-    s_filt = savgol_filter(s_t, 100, 4)
+    s_filt = savgol_filter(s_t, 200, 4)
 
     # -----------------------------------------------------------
     # PERFORM ACF ON SIGNAL TO GET BREATHING RATE

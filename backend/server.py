@@ -21,7 +21,7 @@ def schedule_task(coro):
         return asyncio.run(coro)
 
 
-DEFAULT_MQTT_BROKER = "broker.emqx.io"#"192.168.31.215"
+DEFAULT_MQTT_BROKER = "192.168.46.44"  # "192.168.31.215"
 DEFAULT_MQTT_PORT = 1883
 DEFAULT_MQTT_TOPIC = "csi/data"
 WS_HOST = "localhost"
@@ -58,7 +58,6 @@ def on_message(client, userdata, msg):
         csi = np.array(csi)
         csi = csi.reshape(-1, 114)
 
-
         if not hasattr(on_message, "csi_buffer"):
             on_message.csi_buffer = np.empty((0, 114))
 
@@ -70,7 +69,12 @@ def on_message(client, userdata, msg):
         else:
             breathing_rate = None
 
-        payload = {"raw_payload": csi.tolist(), "rssi": rssi, "motion_detect": motion_detect, "breathing_rate": breathing_rate}
+        payload = {
+            "CSIs": np.asanyarray(csi).flatten().tolist()[0:20],
+            "rssi": rssi,
+            "motion_detect": motion_detect,
+            "breathing_rate": breathing_rate,
+        }
 
         data_entry = {
             "topic": topic,
