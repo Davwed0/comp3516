@@ -137,6 +137,8 @@ void mqtt_send() {
 
   *p = '\0';
 
+  ESP_LOGI("MQTT", "Sending data: %s", mqtt_buffer);
+
   int payload_len = strlen(mqtt_buffer);
   int msg_id = esp_mqtt_client_publish(mqtt_client, "csi/data", mqtt_buffer,
                                        payload_len, 1, 0);
