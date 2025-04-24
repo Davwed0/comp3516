@@ -128,10 +128,11 @@ void mqtt_send() {
   }
   
   *p++ = ','; 
-  *p++ = variance > MOTION_THRESHOLD ? '1' : '0'; 
+  int written = snprintf(p, remaining, "%d", variance > MOTION_THRESHOLD);
+  p += written;
   
   *p++ = ','; 
-  int written = snprintf(p, remaining, "%d", rssi_buffer[0]);
+  written = snprintf(p, remaining, "%d", rssi_buffer[0]);
   p += written;
 
   *p = '\0';
@@ -601,21 +602,22 @@ void app_main() {
     ESP_LOGI(TAG, "MQTT connected successfully!");
   }
 
+  // send CSI data to mqtt
+  esp_now_peer_info_t peer = {
+    .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
+    .ifidx = WIFI_IF_STA,
+    .encrypt = false,
+    .peer_addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+};
+
+  wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
+
+
   const esp_timer_create_args_t timer_args = {.callback = &timer_callback,
                                               .name = "mqtt_timer"};
   esp_timer_handle_t timer;
   ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
   ESP_ERROR_CHECK(esp_timer_start_periodic(timer, MQTT_FREQ));
-
-  // send CSI data to mqtt
-  esp_now_peer_info_t peer = {
-      .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
-      .ifidx = WIFI_IF_STA,
-      .encrypt = false,
-      .peer_addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-  };
-
-  wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
 
   wifi_csi_init(); // Initialize CSI Collection
 }
