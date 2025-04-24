@@ -50,42 +50,43 @@ def on_disconnect(client, userdata, rc):
 
 
 def on_message(client, userdata, msg):
-    # try:
-    topic = msg.topic
-    csi = literal_eval(msg.payload.decode())
-    csi = np.array(csi)
-    csi = csi.reshape(-1, 114)
+    try:
+        topic = msg.topic
+        csi = list(literal_eval(msg.payload.decode()))
+        rssi = csi.pop(-1)
+        motion_detect = csi.pop(-1)
+        csi = np.array(csi)
+        csi = csi.reshape(-1, 114)
 
-    if not hasattr(on_message, "csi_buffer"):
-        on_message.csi_buffer = np.empty((0, 114))
+        print(rssi, motion_detect)
 
-    on_message.csi_buffer = np.concatenate((on_message.csi_buffer, csi))
+        if not hasattr(on_message, "csi_buffer"):
+            on_message.csi_buffer = np.empty((0, 114))
 
-    if len(on_message.csi_buffer) >= 15 * 100:
-        breathing_rate = breathing.get_br(np.vstack(on_message.csi_buffer))
-        on_message.csi_buffer = on_message.csi_buffer[1:]
-    else:
-        breathing_rate = None
+        on_message.csi_buffer = np.concatenate((on_message.csi_buffer, csi))
 
-    print(f"Breathing Rate: {breathing_rate} BPM")
+        if len(on_message.csi_buffer) >= 15 * 100:
+            breathing_rate = breathing.get_br(np.vstack(on_message.csi_buffer))
+            on_message.csi_buffer = on_message.csi_buffer[1:]
+        else:
+            breathing_rate = None
 
-    payload = {"raw_payload": csi.tolist()}
+        payload = {"raw_payload": csi.tolist()}
 
-    data_entry = {
-        "topic": topic,
-        "timestamp": datetime.now().isoformat(),
-        **payload,
-    }
+        data_entry = {
+            "topic": topic,
+            "timestamp": datetime.now().isoformat(),
+            **payload,
+        }
 
-    csi_data.append(data_entry)
-    if len(csi_data) > 100:
-        csi_data.pop(0)
+        csi_data.append(data_entry)
+        if len(csi_data) > 100:
+            csi_data.pop(0)
 
-    schedule_task(broadcast_data(data_entry))
+        schedule_task(broadcast_data(data_entry))
 
-
-# except Exception as e:
-#     print(f"Error processing message: {e}")
+    except Exception as e:
+        print(f"Error processing message: {e}")
 
 
 async def broadcast_data(data):
