@@ -43,6 +43,8 @@ export function CSIDataTable({ data }: CSIDataTableProps) {
               <TableHead>Time</TableHead>
               <TableHead>Topic</TableHead>
               <TableHead>Device ID</TableHead>
+              <TableHead>RSSI</TableHead>
+              <TableHead>Motion</TableHead>
               <TableHead>Data</TableHead>
             </TableRow>
           </TableHeader>
@@ -53,9 +55,11 @@ export function CSIDataTable({ data }: CSIDataTableProps) {
                   <TableCell>{item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : "N/A"}</TableCell>
                   <TableCell>{item.topic || "N/A"}</TableCell>
                   <TableCell>{item.device_id || "N/A"}</TableCell>
+                  <TableCell>{item.rssi || "N/A"}</TableCell>
+                  <TableCell>{item.motion_detect}</TableCell>
                   <TableCell>
                     {item.CSIs ? (
-                      <span>{Array.isArray(item.CSIs) ? `${item.CSIs.length} values` : "Invalid format"}</span>
+                      <span>{item.CSIs.slice(0, 10)}</span>
                     ) : item.subcarriers ? (
                       <span>
                         {Array.isArray(item.subcarriers) ? `${item.subcarriers.length} subcarriers` : "Invalid format"}

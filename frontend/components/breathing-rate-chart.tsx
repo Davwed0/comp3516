@@ -19,7 +19,6 @@ import type { CSIData } from "@/types/csi-data"
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
 const MAX_DATA_POINTS = 50
-const WINDOW_SIZE = 10 // Window size for breathing rate calculation
 
 interface BreathingRateChartProps {
   data: CSIData[]
@@ -44,91 +43,28 @@ export function BreathingRateChart({ data, topic }: BreathingRateChartProps) {
   const chartRef = useRef<ChartJS<"line"> | null>(null)
 
   useEffect(() => {
-    if (!data || data.length < WINDOW_SIZE) return
+    if (!data || data.length === 0) return
 
     // Filter data by topic if provided
     const filteredData = topic ? data.filter((item) => item.topic === topic) : data
-    if (filteredData.length < WINDOW_SIZE) return
 
-    // Get timestamps and calculate breathing rate
+    // Get timestamps and breathing rates
     const timestamps: string[] = []
     const breathingRates: number[] = []
 
-    // Use a sliding window to calculate breathing rate
-    for (let i = WINDOW_SIZE; i < filteredData.length; i++) {
-      const currentItem = filteredData[i]
-
+    filteredData.forEach((item) => {
       // Get timestamp
-      const timestamp = currentItem.timestamp
-        ? new Date(currentItem.timestamp).toLocaleTimeString()
+      const timestamp = item.timestamp
+        ? new Date(item.timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
 
-      // Get a window of data
-      const window = filteredData.slice(i - WINDOW_SIZE, i)
+      // Push timestamp
+      timestamps.push(timestamp)
 
-      // Calculate average CSI value for each data point in the window
-      const avgCSIValues: number[] = []
-
-      window.forEach((item) => {
-        let csiValues: number[] = []
-
-        // Try different data formats
-        if (item.CSIs && Array.isArray(item.CSIs)) {
-          // Format 1: CSIs is an array of values
-          csiValues = item.CSIs.map((val) => {
-            const parsed = typeof val === "string" ? Number.parseFloat(val) : val
-            return isNaN(parsed) ? 0 : parsed
-          })
-        } else if (item.subcarriers && Array.isArray(item.subcarriers)) {
-          // Format 2: subcarriers is an array of objects with amplitude
-          csiValues = item.subcarriers.map((sc) => sc.amplitude || 0)
-        } else {
-          // Try to find any array in the object
-          for (const [key, value] of Object.entries(item)) {
-            if (Array.isArray(value) && value.length > 0) {
-              const numericValues = value.map((v) => {
-                const parsed = typeof v === "string" ? Number.parseFloat(v) : typeof v === "number" ? v : 0
-                return isNaN(parsed) ? 0 : parsed
-              })
-
-              if (numericValues.some((v) => v !== 0)) {
-                csiValues = numericValues
-                break
-              }
-            }
-          }
-        }
-
-        if (csiValues.length > 0) {
-          const avg = csiValues.reduce((sum, val) => sum + val, 0) / csiValues.length
-          avgCSIValues.push(avg)
-        }
-      })
-
-      if (avgCSIValues.length === WINDOW_SIZE) {
-        timestamps.push(timestamp)
-
-        // Normalize values around zero
-        const mean = avgCSIValues.reduce((sum, val) => sum + val, 0) / avgCSIValues.length
-        const normalizedValues = avgCSIValues.map((val) => val - mean)
-
-        // Count zero crossings as a simple breathing rate estimation
-        let crossings = 0
-        for (let j = 1; j < normalizedValues.length; j++) {
-          if (
-            (normalizedValues[j] > 0 && normalizedValues[j - 1] <= 0) ||
-            (normalizedValues[j] < 0 && normalizedValues[j - 1] >= 0)
-          ) {
-            crossings++
-          }
-        }
-
-        // Calculate breathing rate in breaths per minute
-        // Assuming each data point is roughly 1 second apart
-        const breathsPerMinute = (crossings / 2) * (60 / WINDOW_SIZE)
-        breathingRates.push(Math.min(30, Math.max(0, breathsPerMinute))) // Clamp between 0-30
-      }
-    }
+      // Use existing breathing rate value or 0 if None
+      const breathingRate = item.breathing_rate !== null ? item.breathing_rate : 0
+      breathingRates.push(breathingRate);
+    })
 
     // Limit to the last MAX_DATA_POINTS
     const limitedTimestamps = timestamps.slice(-MAX_DATA_POINTS)
@@ -192,8 +128,8 @@ export function BreathingRateChart({ data, topic }: BreathingRateChartProps) {
         <CardTitle>Breathing Rate</CardTitle>
         <CardDescription>
           {topic
-            ? `Estimated breathing rate based on CSI data for topic: ${topic}`
-            : "Estimated breathing rate based on CSI data"}
+            ? `Estimated breathing rate based on existing data for topic: ${topic}`
+            : "Estimated breathing rate based on existing data"}
         </CardDescription>
       </CardHeader>
       <CardContent>

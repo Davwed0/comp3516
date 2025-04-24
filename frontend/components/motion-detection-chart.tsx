@@ -18,8 +18,7 @@ import type { CSIData } from "@/types/csi-data"
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
-const MAX_DATA_POINTS = 50
-const MOTION_THRESHOLD = 0.5 
+const MAX_DATA_POINTS = 50 
 
 interface MotionDetectionChartProps {
   data: CSIData[]
@@ -49,54 +48,17 @@ export function MotionDetectionChart({ data, topic }: MotionDetectionChartProps)
     // Filter data by topic if provided
     const filteredData = topic ? data.filter((item) => item.topic === topic) : data
 
-    // Get timestamps and detect motion based on CSI variance
+    // Get timestamps and motion detection results
     const timestamps: string[] = []
     const motionValues: number[] = []
 
     filteredData.forEach((item) => {
       // Get timestamp
       const timestamp = item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()
+      timestamps.push(timestamp)
 
-      // Extract CSI values to calculate variance
-      let csiValues: number[] = []
-
-      // Try different data formats
-      if (item.CSIs && Array.isArray(item.CSIs)) {
-        // Format 1: CSIs is an array of values
-        csiValues = item.CSIs.map((val) => {
-          const parsed = typeof val === "string" ? Number.parseFloat(val) : val
-          return isNaN(parsed) ? 0 : parsed
-        })
-      } else if (item.subcarriers && Array.isArray(item.subcarriers)) {
-        // Format 2: subcarriers is an array of objects with amplitude
-        csiValues = item.subcarriers.map((sc) => sc.amplitude || 0)
-      } else {
-        // Try to find any array in the object
-        for (const [key, value] of Object.entries(item)) {
-          if (Array.isArray(value) && value.length > 0) {
-            const numericValues = value.map((v) => {
-              const parsed = typeof v === "string" ? Number.parseFloat(v) : typeof v === "number" ? v : 0
-              return isNaN(parsed) ? 0 : parsed
-            })
-
-            if (numericValues.some((v) => v !== 0)) {
-              csiValues = numericValues
-              break
-            }
-          }
-        }
-      }
-
-      if (csiValues.length > 0) {
-        timestamps.push(timestamp)
-
-        // Calculate variance of CSI values as a simple motion detection
-        const mean = csiValues.reduce((sum, val) => sum + val, 0) / csiValues.length
-        const variance = csiValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / csiValues.length
-
-        // Detect motion if variance is above threshold
-        motionValues.push(variance > MOTION_THRESHOLD ? 1 : 0)
-      }
+      // Use existing motion detection result
+      motionValues.push(item.motion_detect ? 1 : 0)
     })
 
     // Limit to the last MAX_DATA_POINTS
@@ -161,8 +123,8 @@ export function MotionDetectionChart({ data, topic }: MotionDetectionChartProps)
         <CardTitle>Motion Detection</CardTitle>
         <CardDescription>
           {topic
-            ? `Motion detection based on CSI variance for topic: ${topic}`
-            : "Motion detection based on CSI variance"}
+            ? `Motion detection based on existing results for topic: ${topic}`
+            : "Motion detection based on existing results"}
         </CardDescription>
       </CardHeader>
       <CardContent>
