@@ -64,14 +64,11 @@ static esp_mqtt_client_handle_t mqtt_client = NULL;
 // [2] YOUR CODE HERE
 
 #define RSSI_BUFFER_SIZE 20
-#define MOTION_THRESHOLD 3.5
 #define MOTION_THRESHOLD 0.5
 static int8_t rssi_buffer[RSSI_BUFFER_SIZE];
 static int rssi_index = 0;
 static bool rssi_buffer_filled = false;
 static bool motion_detected = false;
-static int stable_counter = 0;
-
 static float variance = 0;
 
 bool motion_detection() {
@@ -105,7 +102,9 @@ void mqtt_send() {
   if (CSI_Q_INDEX == 0)
     return;
 
-  int buffer_size = CSI_Q_INDEX * 4 + 1; // 7 bytes per sample + 1 for '\0'
+  // 4 bytes per sample + 1 for '\0'
+  // +4 bytes for rssi and 1 byte for boolean motion_detected
+  int buffer_size = CSI_Q_INDEX * 4 + 4 + 1 + 1; 
   char *mqtt_buffer = malloc(buffer_size);
   if (!mqtt_buffer) {
     ESP_LOGE("MQTT", "Failed to allocate buffer");
@@ -127,6 +126,13 @@ void mqtt_send() {
     p += written;
     remaining -= written;
   }
+  
+  *p++ = ','; 
+  *p++ = variance > MOTION_THRESHOLD ? '1' : '0'; 
+  
+  *p++ = ','; 
+  int written = snprintf(p, remaining, "%d", rssi_buffer[0]);
+  p += written;
 
   *p = '\0';
 
@@ -162,7 +168,7 @@ static void timer_callback(void *arg) {
 #define CONFIG_FORCE_GAIN 1
 #define CONFIG_GAIN_CONTROL CONFIG_FORCE_GAIN
 
-#define MQTT_BROKER_URL "mqtt://192.168.31.215"
+#define MQTT_BROKER_URL "mqtt://192.168.46.44"
 #define MQTT_FREQ 100 * 1000
 
 // UPDATE: Define parameters for scan method
@@ -216,7 +222,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 static bool wifi_connected = false;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-                               int32_t event_id, void *event_data);
+  int32_t event_id, void *event_data);
+static bool mqtt_connected = false;
 
 //------------------------------------------------------MQTT
 // Initialize------------------------------------------------------
@@ -260,9 +267,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
     msg_id = esp_mqtt_client_publish(client, "$", "Hello", 0, 1, 0);
     ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+    mqtt_connected = true;
     break;
-  case MQTT_EVENT_DISCONNECTED:
+    case MQTT_EVENT_DISCONNECTED:
     ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+    mqtt_connected = false;
     break;
   case MQTT_EVENT_PUBLISHED:
     // ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
@@ -316,38 +325,38 @@ static void wifi_init() {
   //         },
   // };
 
-  // wifi_config_t wifi_config = {
-  //     .sta =
-  //         {
-  //             .ssid = "Hotspot1",
-  //             .password = "wifi1234",
-  //             // If you want to connect to other Wi-Fi networks including
-  //             // your
-  //             // mobile phones, use this authomode
-  //             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-  //             // Otherwise, if you want to connect to your mobile
-  //             // phone's hotpot
-  //             // .threshold.authmode = WIFI_AUTH_OPEN,
-  //             // If you want to use your mobile phone's hotpot, use this scan
-  //             // method
-  //             .scan_method = DEFAULT_SCAN_METHOD,
-  //             //
-
-  //             .pmf_cfg = {.capable = true, .required = false},
-  //         },
-  // };
-
   wifi_config_t wifi_config = {
       .sta =
           {
-              .ssid = "wifi_xiaomi",
-              .password = "123wifi123",
+              .ssid = "Hotspot1",
+              .password = "wifi1234",
+              // If you want to connect to other Wi-Fi networks including
+              // your
+              // mobile phones, use this authomode
               .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+              // Otherwise, if you want to connect to your mobile
+              // phone's hotpot
+              // .threshold.authmode = WIFI_AUTH_OPEN,
+              // If you want to use your mobile phone's hotpot, use this scan
+              // method
               .scan_method = DEFAULT_SCAN_METHOD,
+              //
 
               .pmf_cfg = {.capable = true, .required = false},
           },
   };
+
+  // wifi_config_t wifi_config = {
+  //     .sta =
+  //         {
+  //             .ssid = "wifi_xiaomi",
+  //             .password = "123wifi123",
+  //             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+  //             .scan_method = DEFAULT_SCAN_METHOD,
+
+  //             .pmf_cfg = {.capable = true, .required = false},
+  //         },
+  // };
   // [3] END OF YOUR CODE
 
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -540,9 +549,6 @@ static void wifi_csi_init() {
 //------------------------------------------------------Main
 // Function------------------------------------------------------
 void app_main() {
-  /**
-   * @brief Initialize NVS
-   */
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
       ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -551,20 +557,14 @@ void app_main() {
   }
   ESP_ERROR_CHECK(ret);
 
-  /**
-   * @brief Initialize Wi-Fi
-   */
   wifi_init();
 
-  // Get Device MAC Address
   uint8_t mac[6];
   esp_wifi_get_mac(WIFI_IF_STA, mac);
   ESP_LOGI(TAG, "Device MAC Address: " MACSTR, MAC2STR(mac));
 
-  // Try to connect to WiFi
   ESP_LOGI(TAG, "Connecting to WiFi...");
 
-  // Wait for Wi-Fi connection
   int retry_count = 0;
   bool wifi_connected = false;
   while (!wifi_connected && retry_count < 20) {
@@ -580,32 +580,42 @@ void app_main() {
     }
   }
 
-  /**
-   * @brief Initialize ESP-NOW
-   */
-
-  if (wifi_connected) {
-    mqtt_init(); // Initialize MQTT Client
-    const esp_timer_create_args_t timer_args = {.callback = &timer_callback,
-                                                .name = "mqtt_timer"};
-    esp_timer_handle_t timer;
-    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(timer, MQTT_FREQ));
-
-    // send CSI data to mqtt
-    esp_now_peer_info_t peer = {
-        .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
-        .ifidx = WIFI_IF_STA,
-        .encrypt = false,
-        .peer_addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-    };
-
-    wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
-
-    wifi_csi_init(); // Initialize CSI Collection
-
-  } else {
-    ESP_LOGI(TAG, "WiFi connection failed");
+  if (!wifi_connected) {
+    ESP_LOGW(TAG, "Wi-Fi connection failed after 20 attempts");
     return;
+  } else {
+    ESP_LOGI(TAG, "Wi-Fi connected successfully!");
   }
+
+  mqtt_init(); // Initialize MQTT Client
+
+  while (!mqtt_connected) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGI(TAG, "Waiting for MQTT connection...");
+  }
+
+  if (!mqtt_connected) {
+    ESP_LOGW(TAG, "MQTT connection failed.");
+    return;
+  } else {
+    ESP_LOGI(TAG, "MQTT connected successfully!");
+  }
+
+  const esp_timer_create_args_t timer_args = {.callback = &timer_callback,
+                                              .name = "mqtt_timer"};
+  esp_timer_handle_t timer;
+  ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer));
+  ESP_ERROR_CHECK(esp_timer_start_periodic(timer, MQTT_FREQ));
+
+  // send CSI data to mqtt
+  esp_now_peer_info_t peer = {
+      .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
+      .ifidx = WIFI_IF_STA,
+      .encrypt = false,
+      .peer_addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+  };
+
+  wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
+
+  wifi_csi_init(); // Initialize CSI Collection
 }
