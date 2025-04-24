@@ -73,6 +73,7 @@ static float variance = 0;
 
 bool motion_detection() {
   if (!rssi_buffer_filled && rssi_index < 5) {
+    motion_detected = false;
     return false;
   }
 
@@ -90,6 +91,7 @@ bool motion_detection() {
     variance += diff * diff;
   }
   variance /= count;
+  motion_detected = true;
   return true;
 }
 
@@ -104,7 +106,7 @@ void mqtt_send() {
 
   // 4 bytes per sample + 1 for '\0'
   // +4 bytes for rssi and 1 byte for boolean motion_detected
-  int buffer_size = CSI_Q_INDEX * 4 + 4 + 1 + 1; 
+  int buffer_size = CSI_Q_INDEX * 4 + 4 + 1 + 1;
   char *mqtt_buffer = malloc(buffer_size);
   if (!mqtt_buffer) {
     ESP_LOGE("MQTT", "Failed to allocate buffer");
@@ -126,25 +128,25 @@ void mqtt_send() {
     p += written;
     remaining -= written;
   }
-  
-  *p++ = ','; 
-  int written = snprintf(p, remaining, "%d", variance > MOTION_THRESHOLD);
+
+  bool motion_detected = variance > MOTION_THRESHOLD;
+
+  *p++ = ',';
+  int written = snprintf(p, remaining, "%d", motion_detected);
   p += written;
-  
-  *p++ = ','; 
+
+  *p++ = ',';
   written = snprintf(p, remaining, "%d", rssi_buffer[0]);
   p += written;
 
   *p = '\0';
-
-  ESP_LOGI("MQTT", "Sending data: %s", mqtt_buffer);
 
   int payload_len = strlen(mqtt_buffer);
   int msg_id = esp_mqtt_client_publish(mqtt_client, "csi/data", mqtt_buffer,
                                        payload_len, 1, 0);
   free(mqtt_buffer);
   ESP_LOGI("Motion Detection", "Variance: %.2f, Motion Detected: %d", variance,
-           variance > MOTION_THRESHOLD);
+           motion_detected);
 
   if (msg_id != -1) {
     // ESP_LOGI("MQTT", "Message sent, msg_id=%d", msg_id);
@@ -225,7 +227,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 static bool wifi_connected = false;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-  int32_t event_id, void *event_data);
+                               int32_t event_id, void *event_data);
 static bool mqtt_connected = false;
 
 //------------------------------------------------------MQTT
@@ -240,7 +242,7 @@ static void mqtt_init() {
               .disable_auto_reconnect = false,
               .reconnect_timeout_ms = 5000,
           },
-          .buffer =
+      .buffer =
           {
               .size = 4096,
               .out_size = 4096,
@@ -272,7 +274,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
     mqtt_connected = true;
     break;
-    case MQTT_EVENT_DISCONNECTED:
+  case MQTT_EVENT_DISCONNECTED:
     ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
     mqtt_connected = false;
     break;
@@ -414,14 +416,6 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
   if (!info || !info->buf)
     return;
 
-  rssi_buffer[rssi_index] = info->rx_ctrl.rssi;
-  rssi_index = (rssi_index + 1) % RSSI_BUFFER_SIZE;
-  if (rssi_index == 0) {
-    rssi_buffer_filled = true;
-  }
-
-  motion_detection();
-
   // ESP_LOGI(TAG, "CSI callback triggered");
 
   // Applying the CSI_Q_ENABLE flag to determine the output method
@@ -444,6 +438,14 @@ static void wifi_csi_rx_cb(void *ctx, wifi_csi_info_t *info) {
     ESP_LOGI(TAG, "MAC address doesn't match, skipping packet");
     return;
   }
+
+  rssi_buffer[rssi_index] = info->rx_ctrl.rssi;
+  rssi_index = (rssi_index + 1) % RSSI_BUFFER_SIZE;
+  if (rssi_index == 0) {
+    rssi_buffer_filled = true;
+  }
+
+  motion_detection();
 
   wifi_pkt_rx_ctrl_phy_t *phy_info = (wifi_pkt_rx_ctrl_phy_t *)info;
   static int s_count = 0;
@@ -606,14 +608,13 @@ void app_main() {
 
   // send CSI data to mqtt
   esp_now_peer_info_t peer = {
-    .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
-    .ifidx = WIFI_IF_STA,
-    .encrypt = false,
-    .peer_addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-};
+      .channel = CONFIG_LESS_INTERFERENCE_CHANNEL,
+      .ifidx = WIFI_IF_STA,
+      .encrypt = false,
+      .peer_addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+  };
 
   wifi_esp_now_init(peer); // Initialize ESP-NOW Communication
-
 
   const esp_timer_create_args_t timer_args = {.callback = &timer_callback,
                                               .name = "mqtt_timer"};

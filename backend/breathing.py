@@ -12,7 +12,7 @@ from scipy.signal import (
     sosfiltfilt,
     butter,
 )
-
+from hampel import hampel
 
 """
 Computes the breathing rate for a given list of CSI data
@@ -42,7 +42,12 @@ def get_br(csi_data, fs=100):
     # -----------------------------------------------------------
     # FILTER AND SMOOTHEN SIGNAL
     # -----------------------------------------------------------
-    s_filt = savgol_filter(s_t, 100, 4)
+    s_filt = savgol_filter(s_t, 200, 4)
+    s_filt = hampel(s_filt, window_size=10, n_sigma=3.0).filtered_data
+
+    cutoff_freq = [0.15, 0.5]
+    sos = butter(3, cutoff_freq, "band", fs=100, output="sos")
+    s_filt = sosfiltfilt(sos, s_filt)
 
     # -----------------------------------------------------------
     # PERFORM ACF ON SIGNAL TO GET BREATHING RATE
